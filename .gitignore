@@ -1,0 +1,17 @@
+# File di compilazione Fortran
+*.o
+*.mod
+
+# Eseguibili
+*.exe
+*.out
+solver
+
+# File di output pesanti (Paraview e Dati)
+*.vtk
+*.bin
+*.dat
+
+# File nascosti di sistema (Windows/Mac)
+Thumbs.db
+.DS_Store

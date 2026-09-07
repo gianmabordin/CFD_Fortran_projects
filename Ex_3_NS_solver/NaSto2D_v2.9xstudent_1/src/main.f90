@@ -1,0 +1,303 @@
+program main
+  !
+  use mod_types,               only: rp
+  !
+  use mod_common,              only: nx, ny
+  use mod_common,              only: dx, dy
+  use mod_common,              only: dt, dt_rk3, nu, rho
+  use mod_common,              only: time, time_end
+  use mod_common,              only: istep, nsteps, it_rk3
+  !
+  use mod_common,              only: u, v, p, p_star
+  use mod_common,              only: ustar, vstar
+  use mod_common,              only: rhs_p
+  !
+  use mod_common,              only: BC_DIRICHLET, BC_NEUMANN, BC_PERIODIC
+  !
+  use mod_common,              only: bc_u_west, bc_u_east, bc_u_south, bc_u_north
+  use mod_common,              only: bc_v_west, bc_v_east, bc_v_south, bc_v_north
+  use mod_common,              only: bc_p_west, bc_p_east, bc_p_south, bc_p_north
+  !
+  use mod_common,              only: bc_u_west_val, bc_u_east_val, bc_u_south_val, bc_u_north_val
+  use mod_common,              only: bc_v_west_val, bc_v_east_val, bc_v_south_val, bc_v_north_val
+  use mod_common,              only: bc_p_west_val, bc_p_east_val, bc_p_south_val, bc_p_north_val
+  !
+  use mod_common,              only: poisson_maxit, poisson_tol
+  use mod_common,              only: poisson_res, poisson_converged, poisson_iter
+  !
+  use mod_common,              only: CMM_InitGrid, CMM_AllocFields, CMM_FreeFields
+  !
+  use mod_bc,                  only: BC_ApplyVelocity
+  use mod_bc,                  only: BC_ApplyPressure
+  !
+  use mod_pressure_correction, only: PC_ComputeDivergence
+  !
+  use mod_io,                  only: IO_WriteVTK
+  use mod_io,                  only: IO_SaveRestart
+  use mod_io,                  only: IO_LoadRestart
+  use mod_io,                  only: IO_WriteFieldsASCII
+  !
+  use mod_timeint,             only: TIMEINT_AdvanceRK3FractionalStep
+  !
+  implicit none
+  !
+  integer :: log_every, log_header_every
+  integer :: restart_every, vtk_every, ascii_every
+  integer :: it_restart
+  !
+  real(rp) :: div_star_max, div_corr_max
+  real(rp) :: cfl_adv, cfl_diff
+  real(rp) :: umax, vmax
+  !
+  real(rp) :: U0, delta0, amp, kx
+  real(rp) :: x, y
+  real(rp), parameter :: pi = acos(-1.0_rp)
+  !
+  logical :: need_final_restart, need_final_vtk, need_final_ascii
+  logical :: use_restart
+  !
+  character(len=256) :: fname
+  character(len=256) :: out_dir
+  character(len=256) :: restart_file
+  !
+  integer :: istep_start
+  integer :: i, j
+  !
+  ! ------------------------------------------------------------
+  ! Setup
+  ! ------------------------------------------------------------
+  call CMM_InitGrid(128, 64, 2.0_rp, 1.0_rp)
+  call CMM_AllocFields()
+  !
+  rho = 1.0_rp
+  nu  = 1.0e-6_rp
+  dt  = 1.0e-3_rp
+  !
+  time      = 0.0_rp
+  time_end  = 20.0_rp
+  nsteps    = int(time_end / dt)
+  istep     = 0
+  it_rk3    = 0
+  dt_rk3    = 0.0_rp
+  !
+  poisson_maxit = 5000
+  poisson_tol   = 1.0e-6_rp
+  !
+  log_every        = 1
+  log_header_every = 50
+  restart_every    = 100
+  vtk_every        = 100
+  ascii_every      = 100
+  !
+  out_dir = './data'
+  !
+  it_restart  = 0
+  !
+  U0     = 1.0_rp
+  delta0 = 0.03_rp
+  amp    = 1.0e-2_rp
+  kx     = 2.0_rp * pi
+  !
+  ! ------------------------------------------------------------
+  ! Boundary conditions
+  ! ------------------------------------------------------------
+  bc_u_west  = BC_PERIODIC
+  bc_u_east  = BC_PERIODIC
+  bc_u_south = BC_DIRICHLET
+  bc_u_north = BC_DIRICHLET
+  !
+  bc_v_west  = BC_PERIODIC
+  bc_v_east  = BC_PERIODIC
+  bc_v_south = BC_DIRICHLET
+  bc_v_north = BC_DIRICHLET
+  !
+  bc_p_west  = BC_PERIODIC
+  bc_p_east  = BC_PERIODIC
+  bc_p_south = BC_NEUMANN
+  bc_p_north = BC_NEUMANN
+  !
+  bc_u_west_val  = 0.0_rp
+  bc_u_east_val  = 0.0_rp
+  bc_u_south_val = -U0
+  bc_u_north_val =  U0
+  !
+  bc_v_west_val  = 0.0_rp
+  bc_v_east_val  = 0.0_rp
+  bc_v_south_val = 0.0_rp
+  bc_v_north_val = 0.0_rp
+  !
+  bc_p_west_val  = 0.0_rp
+  bc_p_east_val  = 0.0_rp
+  bc_p_south_val = 0.0_rp
+  bc_p_north_val = 0.0_rp
+  !
+  ! ------------------------------------------------------------
+  ! Initial / restart state
+  ! ------------------------------------------------------------
+  use_restart = .false.
+  if (it_restart > 0) use_restart = .true.
+  !
+  write(restart_file,'(A,"/field_",I6.6,".bin")') trim(out_dir), it_restart
+  !
+  u      = 0.0_rp
+  v      = 0.0_rp
+  p      = 0.0_rp
+  p_star = 0.0_rp
+  ustar  = 0.0_rp
+  vstar  = 0.0_rp
+  rhs_p  = 0.0_rp
+  !
+  if (use_restart) then
+     call IO_LoadRestart(trim(restart_file))
+     call BC_ApplyVelocity(u, v)
+     call BC_ApplyPressure(p)
+     istep_start = istep + 1
+  else
+     !
+     ! u on vertical faces: x = i*dx, y = (j-0.5)*dy
+     do j = 1, ny
+        y = (real(j,rp) - 0.5_rp) * dy
+        do i = 0, nx
+           u(i,j) = U0 * tanh((y - 0.5_rp) / delta0)
+        end do
+     end do
+     !
+     ! v on horizontal faces: x = (i-0.5)*dx, y = j*dy
+     do j = 0, ny
+        y = real(j,rp) * dy
+        do i = 1, nx
+           x = (real(i,rp) - 0.5_rp) * dx
+           v(i,j) = amp * sin(kx * x) * exp(-((y - 0.5_rp)**2) / (2.0_rp * delta0 * delta0))
+        end do
+     end do
+     !
+     p = 0.0_rp
+     !
+     call BC_ApplyVelocity(u, v)
+     call BC_ApplyPressure(p)
+     istep_start = 1
+  end if
+  !
+  ! ------------------------------------------------------------
+  ! Header
+  ! ------------------------------------------------------------
+  write(*,'(A)') '===================================================================================='
+  write(*,'(A)') 'NaSto'
+  write(*,'(A)') 'Fractional-step RK3 with projection'
+  write(*,'(A)') '===================================================================================='
+  write(*,'(A,I8)')     'nx              = ', nx
+  write(*,'(A,I8)')     'ny              = ', ny
+  write(*,'(A,ES12.4)') 'dx              = ', dx
+  write(*,'(A,ES12.4)') 'dy              = ', dy
+  write(*,'(A,ES12.4)') 'dt              = ', dt
+  write(*,'(A,ES12.4)') 'nu              = ', nu
+  write(*,'(A,ES12.4)') 'rho             = ', rho
+  write(*,'(A,ES12.4)') 'time            = ', time
+  write(*,'(A,ES12.4)') 'time_end        = ', time_end
+  write(*,'(A,I8)')     'istep           = ', istep
+  write(*,'(A,I8)')     'nsteps          = ', nsteps
+  write(*,'(A,I8)')     'log_every       = ', log_every
+  write(*,'(A,I8)')     'restart_every   = ', restart_every
+  write(*,'(A,I8)')     'vtk_every       = ', vtk_every
+  write(*,'(A,I8)')     'ascii_every     = ', ascii_every
+  write(*,'(A,I8)')     'poisson_maxit   = ', poisson_maxit
+  write(*,'(A,ES12.4)') 'poisson_tol     = ', poisson_tol
+  write(*,'(A,L1)')     'use_restart     = ', use_restart
+  write(*,'(A,A)')      'restart_file    = ', trim(restart_file)
+  write(*,'(A,A)')      'out_dir         = ', trim(out_dir)
+  write(*,'(A)') '===================================================================================='
+  call PrintLogHeader()
+  !
+  if (.not. use_restart) then
+     call WriteOutputSet(istep, .true., .true., .true.)
+  end if
+  !
+  ! ------------------------------------------------------------
+  ! Time loop
+  ! ------------------------------------------------------------
+  do istep = istep_start, nsteps
+     !
+     call BC_ApplyVelocity(u, v)
+     call BC_ApplyPressure(p)
+     !
+     call TIMEINT_AdvanceRK3FractionalStep(u, v, p)
+     !
+     call PC_ComputeDivergence(rhs_p, ustar, vstar)
+     div_star_max = maxval(abs(rhs_p(2:nx-1,2:ny-1)))
+     !
+     call PC_ComputeDivergence(rhs_p, u, v)
+     div_corr_max = maxval(abs(rhs_p(2:nx-1,2:ny-1)))
+     !
+     umax = maxval(abs(u))
+     vmax = maxval(abs(v))
+     !
+     cfl_adv  = dt * (umax / dx + vmax / dy)
+     cfl_diff = nu * dt * (1.0_rp/(dx*dx) + 1.0_rp/(dy*dy))
+     !
+     time = time + dt
+     !
+     if (mod(istep, log_header_every) == 0) call PrintLogHeader()
+     !
+     if (mod(istep, log_every) == 0) then
+        write(*,'(I6,2X,ES10.3,2X,ES10.3,2X,ES10.3,2X,ES9.2,2X,ES9.2,2X,L6,2X,I6,2X,ES10.3)') &
+             istep, time, div_star_max, div_corr_max, cfl_adv, cfl_diff, &
+             poisson_converged, poisson_iter, poisson_res
+     end if
+     !
+     if (mod(istep, restart_every) == 0 .or. &
+         mod(istep, vtk_every)     == 0 .or. &
+         mod(istep, ascii_every)   == 0) then
+        call WriteOutputSet(istep,                           &
+                            mod(istep, restart_every) == 0,  &
+                            mod(istep, vtk_every)     == 0,  &
+                            mod(istep, ascii_every)   == 0)
+     end if
+     !
+  end do
+  !
+  ! ------------------------------------------------------------
+  ! Final output
+  ! ------------------------------------------------------------
+  need_final_restart = .true.
+  need_final_vtk     = .true.
+  need_final_ascii   = .true.
+  !
+  call WriteOutputSet(istep, need_final_restart, need_final_vtk, need_final_ascii)
+  !
+  call CMM_FreeFields()
+  !
+contains
+  !
+  subroutine PrintLogHeader()
+    !
+    write(*,'(A)') '------------------------------------------------------------------------------------------------'
+    write(*,'(A)') '   It        time        div*     div_corr    CFL_adv   CFL_diff   p_conv   p_iter     p_res'
+    write(*,'(A)') '------------------------------------------------------------------------------------------------'
+    !
+  end subroutine PrintLogHeader
+  !
+  subroutine WriteOutputSet(step_id, do_restart, do_vtk, do_ascii)
+    !
+    integer, intent(in) :: step_id
+    logical, intent(in) :: do_restart
+    logical, intent(in) :: do_vtk
+    logical, intent(in) :: do_ascii
+    !
+    if (do_restart) then
+       write(fname,'(A,"/field_",I6.6,".bin")') trim(out_dir), step_id
+       call IO_SaveRestart(trim(fname))
+    end if
+    !
+    if (do_vtk) then
+       write(fname,'(A,"/field_",I6.6,".vtk")') trim(out_dir), step_id
+       call IO_WriteVTK(trim(fname))
+    end if
+    !
+    if (do_ascii) then
+       write(fname,'(A,"/field_",I6.6,".dat")') trim(out_dir), step_id
+       call IO_WriteFieldsASCII(trim(fname))
+    end if
+    !
+  end subroutine WriteOutputSet
+  !
+end program main
