@@ -21,6 +21,11 @@ The projects focus on implementing numerical methods to solve differential equat
 * **Methods:** The solver utilizes a fractional-step, projection-based method. Time integration is performed using a three-stage Runge-Kutta (RK3) scheme. Spatial discretization relies on second-order finite differences on a staggered grid, while the pressure correction step uses a discrete Poisson equation solved with a preconditioned BiCGStab iterative solver.
 * **Key Features:** Validates diffusive terms and physical boundaries through a Poiseuille flow simulation. Assesses numerical accuracy, energy conservation, and exact incompressibility enforcement via the Taylor-Green vortex benchmark. Explores non-linear vortex dynamics, shear layer roll-up, and subharmonic pairing through the free simulation of the Kelvin-Helmholtz instability.
 
+### 📁 Exercise 4: Computation of Pi via Numerical Integration and MPI Parallelization
+* **Objective:** Compute the value of Pi based on the numerical integration of a specific function over the interval [0, 1] using the trapezoidal rule.
+* **Methods:** The project features a double-precision serial algorithm with an adaptive grid refinement strategy, alongside a parallel implementation using the Message Passing Interface (MPI) library based on the SPMD paradigm. The global domain is decomposed into sub-intervals and collected using `MPI_Reduce` collective operations.
+* **Key Features:** Investigates the physical limits of floating-point arithmetic (machine epsilon) and verifies the topological independence of the MPI processes. Includes an extensive high-performance computing (HPC) analysis, evaluating Strong Scaling (fitted with Amdahl's Law) and Weak Scaling (fitted with Gustafson's Law) to highlight super-linear cache effects and hardware memory bottlenecks.
+
 ---
 
 ## Prerequisites and Compilation
