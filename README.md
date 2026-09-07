@@ -11,6 +11,11 @@ The projects focus on implementing numerical methods to solve differential equat
 * **Methods:** Implicit Euler (1st-order accuracy) and Crank-Nicolson (2nd-order accuracy).
 * **Key Features:** Error analysis, theoretical convergence rate verification, and data export for visualization.
 
+### 📁 Exercise 2: Numerical Integration of the Linear Convection-Diffusion Equation
+* **Objective:** Solve the linear convection-diffusion equation to study the physical mechanisms of advection and viscous diffusion.
+* **Methods:** Time integration is performed using a three-stage third-order Runge-Kutta (RK3) scheme. Spatial discretization is handled via first-order forward (FW1), first-order backward (BW1), and second-order centered (CS2) schemes for the convective term. The diffusive term is discretized using a fourth-order centered (CS4) scheme.
+* **Key Features:** Evaluates pure convection, pure diffusion, and full convection-diffusion cases using Gaussian and harmonic initial conditions. The project analyzes numerical artifacts such as the unconditional instability of FW1, the artificial dissipation of BW1, and the dispersion error of CS2. Stability limits are rigorously checked using CFL and Diffusion numbers.
+
 ---
 
 ## Prerequisites and Compilation
