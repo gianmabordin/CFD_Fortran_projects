@@ -7,9 +7,9 @@ The projects focus on implementing numerical methods to solve differential equat
 ## Repository Structure
 
 ### 📁 Exercise 1: Numerical Integration of the Logistic Equation
-* **Objective:** Solve non-linear Ordinary Differential Equations (ODEs) focusing on the Logistic Equation.
-* **Methods:** Implicit Euler (1st-order accuracy) and Crank-Nicolson (2nd-order accuracy).
-* **Key Features:** Error analysis, theoretical convergence rate verification, and data export for visualization.
+* **Objective:** Solve a non-linear Ordinary Differential Equation (ODE) modeling population dynamics under resource constraints.
+* **Methods:** Time integration is performed using the Implicit Euler (first-order) and Crank-Nicolson (second-order) schemes. The resulting non-linear algebraic equations are solved at each time step via an iterative Newton-Raphson root-finding algorithm.
+* **Key Features:** Evaluates formal accuracy and truncation errors through power-law convergence analysis. Explores the physical limits of floating-point arithmetic by comparing double and single precision, highlighting the V-shaped global error curves where machine round-off noise dominates.
 
 ### 📁 Exercise 2: Numerical Integration of the Linear Convection-Diffusion Equation
 * **Objective:** Solve the linear convection-diffusion equation to study the physical mechanisms of advection and viscous diffusion.
